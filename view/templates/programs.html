@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<html style="height:100%" >
+
+<head>
+  <script src="https://d3js.org/d3.v4.min.js"></script>
+</head>
+<h1> Top Programmes pour les {{var}}s  </h1>
+
+<body id="body" style="height:100%; width:100%"  onload="loadData()" onresize="visualizeData();">
+  <div id="d3-visualization-contianer">
+    <svg style="border:1px lightgray solid;" />
+  </div>
+
+
+  <script>
+//-------------------------------------------------------------------//
+//                                                                   //
+//                                                                   //
+//                         HYPER-PARAMETERS                          //
+//                                                                   //
+//                                                                   //
+//-------------------------------------------------------------------//
+var hyperParameters = {
+  // FONTS
+  "fonts": {
+    // Font style for chart title
+    "title": {
+      "family": "Courier New", // Monospace font. Used in all font-based calculations
+      "size": 14
+    },
+    // Font style for chart buttons
+    "buttons": {
+      "family": "Courier New",
+      "size": 12
+    },
+    // Font style for axes
+    "axes": {
+      "family": "Courier New",
+      "size": 8,
+      "maxCharacters": { // maximum charcters to show
+        "x": 10
+      }
+    },
+    // Font style for tooltip
+    "tooltip": {
+      "family": "Times",
+      "size": 12
+    }
+  },
+  // COLORS
+  "colors": {
+    // Color styles for bars
+    "bars": {
+      "low": "cyan",
+      "high": "blue",
+      "hover": { // on hover colors
+        "low": "coral",
+        "high": "orangered"
+      }
+    },
+    // Color styles for buttons
+    "buttons": {
+      "stroke": "black",
+      "fill": {
+        "notSelected": "white",
+        "selected": "blue"
+      }
+    },
+    // Color styles for tooltip
+    "tooltip": {
+      "fill": "rgb(51, 51, 51)",
+      "stoke": "rgb(51, 51, 51)",
+      "opacity": "0.8",
+      "text": "cyan",
+      "emphasis": "white"
+    }
+  },
+  // TEXT
+  "text": {
+    "title": { // Pre and Post text (of selected data) for chart title
+      "pretext": "Most popular programs ",
+      "posttext": " by number of projects"
+    }
+  },
+  // DATA
+  "data": {
+    "selected": "None", // Currently selected data. Used during resize events
+    "numberToShow": 8, // Max number of bars to show
+    "tooltipKeys": ["name", "values"], // keys from within data to play in tooltip
+    "x": "name", // Key within the data to be used to extract data for x axes
+    "y": "values" // Key within data to be used for y values of bars
+  },
+  // CANVAS
+  "canvas": { // default x and y
+    "x": 500,
+    "y": 500,
+    "match": { // match width / height of the specified ID if it exists
+      "x": "body",
+      "y": "body"
+    }
+  },
+  "tooltip": {
+    "curve": 5, // curavture of corners
+    "point": 10 // the bottom triangle
+  }
+}
+
+// give variables global scope to not have to nest function definitions
+var canvas, heightMatchObject, widthMatchObject, margins, bar, maxDrawingValues
+var incomingData, buttonKeys
+
+//-------------------------------------------------------------------//
+//                                                                   //
+//                                                                   //
+//                     VISUALIZATION FUNCTIONS                       //
+//                                                                   //
+//                                                                   //
+//-------------------------------------------------------------------//
+// Load and parse JSON
+function loadData() {
+    d3.json("static/programsByGender{{sexe}}.json", function(error, data) {
+        incomingData = data
+        visualizeData()
+    })
+}
+
+
+//-------------------------------------------------------------------//
+//                                                                   //
+//                         MAKE BAR CHART                            //
+//                                                                   //
+//-------------------------------------------------------------------//
+// Make the entire bar chart - sets up various canvas relate parameters
+// such as margins and selected data. Can be called during screen
+// resize to get a new chart that fits in the alloted space
+function visualizeData() {
+  // Default canvas sizes
+  canvas = {
+      "x": hyperParameters.canvas.x,
+      "y": hyperParameters.canvas.y
+  };
+
+  // Update canvas size if size matching is specified
+  heightMatchObject = document.getElementById(hyperParameters.canvas.match.y);
+  widthMatchObject = document.getElementById(hyperParameters.canvas.match.x);
+  if (heightMatchObject != null) {canvas.y = heightMatchObject.clientHeight};
+  if (widthMatchObject != null) {canvas.x = widthMatchObject.clientWidth};
+
+  // Margins
+  margins = {
+    "x": {
+      "left": canvas.x * 0.04,
+      "right": canvas.x * 0.08,
+      "bottom": "100px"
+    },
+    "y": {
+      "top": canvas.y * 0.04,
+      "bottom": canvas.y * 0.04
+    },
+    "title": hyperParameters.fonts.title.size * 2,
+    "buttons": hyperParameters.fonts.buttons.size * 2,
+    "axes": {
+      "x": hyperParameters.fonts.axes.size * hyperParameters.fonts.axes.maxCharacters.x,
+      "y": 40
+    }
+  }
+
+  // Max free values to draw chart in
+  maxDrawingValues = {
+      "x": canvas.x - margins.x.left - margins.x.right - margins.axes.y,
+      "y": canvas.y - margins.y.top - margins.y.bottom - margins.axes.x - margins.title - margins.buttons
+  };
+
+  // bar parameters. Bar.width will be calculated later
+  bar = {
+      "spacing": 2 // spacing between bars
+  };
+
+  // If buttons already exist then clear everything and start from scratch
+  // Add an window listener event for window resizing to make sure the chart is always
+  // the perfect size
+  if (!d3.selectAll("g.buttonsGroup").empty()) {
+      d3.select("svg").selectAll("g").remove()
+  }
+
+  // Make group for the entire chart
+  d3.select("svg")
+    .attr("perserveAspectRatio", "xMinYMid meet") // allows SVG scaling
+    .attr("viewBox", "0 0 " + canvas.x.toString() + " " + canvas.y.toString())
+    .classed("svg-content-responsive", true)
+    .append("g")
+    .attr("id", "chartGroup")
+    .data(incomingData)
+
+  // Make buttons for each key in JSON
+  buttonKeys = d3.keys(incomingData)
+
+  // Default chart drawn is first of all data. If from resizing then it will matain
+  // the data the user already selected
+  if (hyperParameters.data.selected == "None") {
+    hyperParameters.data.selected = buttonKeys[0]
+    var maxY = d3.max(incomingData[hyperParameters.data.selected], function(d) {return d[hyperParameters.data.y]})
+    margins.axes.y = maxY.toString().length * hyperParameters.fonts.axes.size
+    maxDrawingValues.x = canvas.x - margins.x.left - margins.x.right - margins.axes.y
+  }
+
+  // buttons are made first as they may require an increase in margin
+  makeButtons(buttonKeys)
+  // Adds title, axes and bars
+  drawChart(hyperParameters.data.selected)
+}
+
+
+//-------------------------------------------------------------------//
+//                                                                   //
+//                           DRAW CHART                              //
+//                                                                   //
+//-------------------------------------------------------------------//
+// Draws the chart part of the entire bar chart, e.g. axes, bars, title
+function drawChart(datapoint) {
+  // Extract current data and update current selected data
+  hyperParameters.data.selected = datapoint // in case of window resize
+  data = incomingData[datapoint];
+
+  // Get current number of rectangles (bars of the bar chart). Needed later
+  // to determine if we must add or remove bars
+  currentNumberOfRectangles = document.getElementsByTagName("rect").length
+
+  // Color in buttons based off of selected data
+  d3.selectAll("circle.button").each(
+      function(d, i) {
+        if (d == datapoint) {
+            d3.select(this).attr("fill", hyperParameters.colors.buttons.fill.selected)
+        } else {
+            d3.select(this).attr("fill", hyperParameters.colors.buttons.fill.notSelected)
+        }
+      })
+
+
+  // Sort data from greatest to least
+  data.sort(function(a, b) {return b[hyperParameters.data.y] - a[hyperParameters.data.y]});
+
+  // Get Subset of top numberToShow data points
+  // JS is kind and will not throw an error if dataParameters.numberToShow is
+  // greater than the actual number of elements in the array
+  subset = data.slice(0, hyperParameters.data.numberToShow);
+
+  // Get min / max values of y
+  var dataExtent = d3.extent(subset, function(d) {return d[hyperParameters.data.y]})
+
+  // Update y-axis margin to fit text of longest y-axis label
+  // This will affect the space available for making the Title
+  margins.axes.y = dataExtent[1].toString().length * hyperParameters.fonts.axes.size
+  maxDrawingValues.x = canvas.x - margins.x.left - margins.x.right - margins.axes.y
+
+  // Determine bar widths (subset.length may be less than the desired number of data to show)
+  bar.width = maxDrawingValues.x / (subset.length) - bar.spacing;
+
+  // Make Title which adjusts the margins and effects the drawing values of y
+  makeTitle(datapoint)
+
+  // Add Axes
+  makeAxes(subset, dataExtent[1])
+
+  // Scales
+  var yScale = d3.scaleLinear().domain([0, dataExtent[1]]).range([0, maxDrawingValues.y])
+  var colorScale = d3.scaleLinear().domain([0, dataExtent[1]]).range([hyperParameters.colors.bars.low, hyperParameters.colors.bars.high])
+  var hoverColorScale = d3.scaleLinear().domain([0, dataExtent[1]]).range([hyperParameters.colors.bars.hover.low, hyperParameters.colors.bars.hover.high])
+
+  // Make the bars
+  if (currentNumberOfRectangles < subset.length) { // We need to add more rectangles
+
+    d3.select("#chartGroup") // select the main chart group
+      .selectAll("g") // grab all sub groups
+      .data(subset) // bind / rebind data
+      .enter() // add data as needed. Note! The following is ONLY for newely added bars
+      .append("g") // add new group for each bar
+      .attr("class", "barGroup")
+      .attr("transform", function(d, i) {return "translate(" + (i * bar.width + i * bar.spacing + margins.x.left + margins.axes.y) + ",0)"})
+      .append("rect") // add the bars
+      .attr("width", bar.width) // set the width
+      .attr("height", function(d) {return yScale(d[hyperParameters.data.y])})
+      .style("fill", function(d) {return colorScale(d[hyperParameters.data.y])}) // the following is the pop up animation
+      .attr("y", canvas.y)
+      .transition().delay(function(d, i) {return 100 + i * 10})
+      .attr("y", function(d) {return maxDrawingValues.y - yScale(d[hyperParameters.data.y]) + margins.y.top + margins.title + margins.buttons})
+
+    // Adjust pre-existing bars, size of rect first, then position
+    d3.select("#chartGroup")
+      .selectAll("g")
+      .select("rect")
+      .transition().delay(function(d, i) {return 100 + i * 10})
+      .attr("width", bar.width)
+      .attr('y', function(d) {return maxDrawingValues.y - yScale(d[hyperParameters.data.y]) + margins.y.top + margins.title + margins.buttons;})
+      .attr("height", function(d) {return yScale(d[hyperParameters.data.y])})
+      .style("fill", function(d) {return colorScale(d[hyperParameters.data.y])})
+
+    d3.select("#chartGroup")
+      .selectAll("g")
+      .transition().delay(function(d, i) {return 100 + i * 10}) // shift pre-existing groups over
+      .attr("transform", function(d, i) {return "translate(" + (i * bar.width + i * bar.spacing + margins.x.left + margins.axes.y) + ",0)"})
+
+  } else if (subset.length < hyperParameters.data.numberToShow) { // We need to remove rectangles
+    d3.select("#chartGroup")
+      .selectAll("g")
+      .select("rect")
+      .transition().delay(function(d, i) {if (i > subset.length) {return 100 + i * 10}})
+      .attr("y", canvas.y)
+
+    d3.select("#chartGroup")
+      .selectAll("g")
+      .data(subset)
+      .exit()
+      .remove() // remove excess bars
+
+    // Adjust remaining bars
+    d3.select("#chartGroup")
+      .selectAll("g")
+      .select("rect")
+      .transition().delay(function(d, i) {return 100 + i * 10})
+      .attr("width", bar.width)
+      .attr("height", function(d) {return yScale(d[hyperParameters.data.y])})
+      .attr("y", function(d) {return maxDrawingValues.y - yScale(d[hyperParameters.data.y]) + margins.y.top + margins.title + margins.buttons})
+
+    d3.select("#chartGroup")
+      .selectAll("g")
+      .transition().delay(function(d, i) {return 100 + i * 10}) // shift pre-existing groups over
+      .attr("transform", function(d, i) {return "translate(" + (i * bar.width + i * bar.spacing + margins.x.left + margins.axes.y) + ",0)"})
+
+  } else { // We just have to shift current rectangles
+
+    // Adjust pre-existing bars
+    d3.select("#chartGroup")
+      .selectAll("g")
+      .data(subset)
+      .select("rect")
+      .transition().delay(function(d, i) {return 100 + i * 10})
+      .attr("width", bar.width)
+      .attr('y', function(d) {return maxDrawingValues.y - yScale(d[hyperParameters.data.y]) + margins.y.top + margins.title + margins.buttons;})
+      .attr("height", function(d) {return yScale(d[hyperParameters.data.y])})
+      .style("fill", function(d) {return colorScale(d[hyperParameters.data.y])})
+
+    d3.select("#chartGroup")
+      .selectAll("g")
+      .transition().delay(function(d, i) {return 100 + i * 10}) // shift pre-existing groups over
+      .attr("transform", function(d, i) {return "translate(" + (i * bar.width + i * bar.spacing + margins.x.left + margins.axes.y) + ",0)"})
+  }
+
+  // chartGroup is a selection for all data point groups
+  var chartGroup = d3.selectAll("g.barGroup")
+
+  // Bind mouseover / mouseout events
+  chartGroup.on("mouseover", mouseoverFunction)
+  chartGroup.on("mouseout", mouseoutFunction)
+
+  function mouseoverFunction(d, i) {
+      d3.select(this).select("rect").style("fill", hoverColorScale(d[hyperParameters.data.y]));
+      x = i * bar.width + i * bar.spacing + margins.x.left + margins.axes.y + bar.width / 2
+      y = maxDrawingValues.y - yScale(d[hyperParameters.data.y]) + margins.y.top + margins.title + margins.buttons - hyperParameters.fonts.tooltip.size / 2
+      makeTooltip(x, y, getToolTipTextArray(d))
+  }
+  function mouseoutFunction(d, i) {
+      d3.select("#tooltip").remove()
+      d3.select(this).select("rect").style("fill", colorScale(d[hyperParameters.data.y]))
+  }
+
+}
+
+
+//-------------------------------------------------------------------//
+//                                                                   //
+//                           MAKE BUTTONS                            //
+//                                                                   //
+//-------------------------------------------------------------------//
+// Makes radio buttons for changing chart
+function makeButtons(buttonArray) {
+    var buttonCXs = [] // x coordinates for buttons
+    var buttonCYs = [] // y corrdinates for buttons
+    var radius = hyperParameters.fonts.buttons.size / 2 // radius is half button font size
+    var x = margins.axes.y + margins.x.left + radius / 2 // starting x locations
+    var yShift = 0 // how many line drops are made by button
+
+    for (var i = 0; i < buttonArray.length; i++) {
+        // If too far right, drop down and adjust margins (calculated using monospace font)
+        if (x + buttonArray[i].length * hyperParameters.fonts.buttons.size > canvas.x - margins.x.right) {
+          // increase space preserved for buttons: enough space for a line of font
+          //  and padding by radius length
+          margins.buttons += hyperParameters.fonts.buttons.size + radius
+          // reset current x to left position
+          x = margins.axes.y + margins.x.left + radius / 2
+          // update max y drawing value to corespond to increase space demand
+          // of buttons
+          maxDrawingValues.y = canvas.y - margins.y.top - margins.y.bottom - margins.axes.x - margins.title - margins.buttons
+          yShift += 1
+        }
+
+        y = margins.buttons / 2 + yShift * radius + margins.y.top
+
+        buttonCXs.push(x)
+        buttonCYs.push(y)
+        if (i == 0) {
+            x += (buttonArray[i].length * hyperParameters.fonts.buttons.size) + radius * (i + 1)
+        } else {
+            x += (buttonArray[i].length * hyperParameters.fonts.buttons.size) + radius * (i)
+        }
+
+    }
+
+    var buttonGroup = d3.select("svg")
+                        .append("g") // group for all buttons
+                        .attr("class", "buttonsGroup")
+                        .selectAll("g.buttonsGroup")
+                        .data(buttonArray)
+                        .enter()
+                        .append("g") // group for each button (circle and text)
+                        .attr("class", "buttonGroup")
+
+    // Add the radial buttons
+    buttonGroup.append("circle")
+    buttonGroup.select("circle")
+               .attr("r", radius)
+               .attr("cx", function(d, i) {return buttonCXs[i]})
+               .attr("cy", function(d, i) {return buttonCYs[i]})
+               .attr("stroke", hyperParameters.colors.buttons.stroke)
+               .attr("fill", hyperParameters.colors.buttons.fill.notSelected)
+               .on("click", drawChart)
+               .attr("class", "button")
+
+    // Add the text (using monospace font)
+    buttonGroup.append("text")
+    buttonGroup.select("text")
+               .text(function(d) {return d})
+               .attr("x", function(d, i) {return buttonCXs[i] + radius + radius / 2})
+               .attr("y", function(d, i) {return buttonCYs[i] + radius / 2})
+               .attr("font-family", hyperParameters.fonts.buttons.family)
+               .attr("font-size", hyperParameters.fonts.buttons.size)
+               .on("click", drawChart)
+
+}
+
+//-------------------------------------------------------------------//
+//                                                                   //
+//                            MAKE TITLE                             //
+//                                                                   //
+//-------------------------------------------------------------------//
+function makeTitle() {
+  // Does chart title already exist?
+  if (!d3.select("g.chartTitleGroup").empty()) {
+    // Yes. Clear Title
+    d3.select("g.chartTitleGroup").remove()
+    // Reset Margins
+    margins.title = hyperParameters.fonts.title.size * 2
+  }
+
+  // Construct full title
+  var fullTitle = hyperParameters.text.title.pretext + hyperParameters.data.selected + hyperParameters.text.title.posttext
+
+  // Store title lines
+  var titleLines = []
+
+  // Max line length
+  var charactersPerLine = Math.max(Math.floor(maxDrawingValues.x / hyperParameters.fonts.title.size), 2)
+
+  while (fullTitle.length > 0) {
+    var slicePos = charactersPerLine - 1
+    // get title string splice
+    var tempSlice = fullTitle.slice(0, slicePos)
+
+    // get position of last space
+    var lastSpace = tempSlice.lastIndexOf(" ")
+
+    if (tempSlice[0] == " ") { // space is first character, drop it
+      fullTitle = fullTitle.slice(1, fullTitle.length)
+      tempSlice = fullTitle.slice(0, slicePos)
+      lastSpace = tempSlice.lastIndexOf(" ")
+    }
+
+    if (fullTitle[slicePos + 1] != " " & slicePos < fullTitle.length) {
+      // the leading character of next splice is not a space (e.g. breaks a word)
+      // and there is more in the title to come
+      if (lastSpace == -1) {
+        tempSlice = fullTitle.slice(0, slicePos - 1) + "-"
+        slicePos -= 1
+      } else {
+        slicePos = lastSpace
+        tempSlice = fullTitle.slice(0, slicePos)
+      }
+      lastSpace = tempSlice.lastIndexOf(" ")
+    } else if (slicePos < fullTitle.length & lastSpace < tempSlice.length) {
+      // last word is split, so add a hypen
+      tempSlice = fullTitle.slice(0, slicePos - 1)
+      slicePos -= 1
+      lastSpace = tempSlice.lastIndexOf(" ")
+
+      // if the word is a two letter word, e.g. the last letter in the string is
+      // the first letter of the two letter word, then that letter is droped for
+      // a hypen before a space. That makes no sense, so drop the entire 2 letter word
+      if (lastSpace == slicePos -  1) {
+        // if space is last character drop it
+        tempSlice = fullTitle.slice(0, slicePos - 1)
+        slicePos -= 1
+      } else {
+        tempSlice += "-"
+        slicePos -= 1
+      }
+      lastSpace = tempSlice.lastIndexOf(" ")
+    }
+
+    if (lastSpace == slicePos) {
+      // if space is last character drop it
+      tempSlice = fullTitle.slice(0, slicePos - 1)
+      slicePos -= 1
+    }
+
+
+    titleLines.push(tempSlice)
+    fullTitle = fullTitle.slice(slicePos, fullTitle.length)
+  }
+
+
+
+  // // Add Chart Title group
+  var chartTitle = d3.select("svg")
+                      .append("g")
+                      .attr("class", "chartTitleGroup")
+
+
+  for (var i = 0; i < titleLines.length; i++) {
+    chartTitle.append("text")
+    .attr("class", "chartTitle")
+    .attr("id", "chartTitle")
+    .text(titleLines[i])
+    .attr("text-anchor", "middle")
+    .attr("font-size", hyperParameters.fonts.title.size)
+    .attr("font-family", hyperParameters.fonts.title.family)
+    .attr("x", margins.axes.y + margins.x.left + maxDrawingValues.x / 2)
+    .attr("y", margins.y.top + margins.buttons + (hyperParameters.fonts.title.size / 2) + ((i + 1) *  hyperParameters.fonts.title.size))
+
+    margins.title += hyperParameters.fonts.title.size
+    maxDrawingValues.y = canvas.y - margins.y.top - margins.y.bottom - margins.axes.x - margins.title - margins.buttons
+
+  }
+
+
+}
+
+//-------------------------------------------------------------------//
+//                                                                   //
+//                            MAKE AXES                              //
+//                                                                   //
+//-------------------------------------------------------------------//
+// Makes axes / updates axes if they already exist
+function makeAxes(subset, yMax) {
+    // y-axis
+    var yAxisScale = d3.scaleLinear().domain([0, yMax]).range([maxDrawingValues.y, 0])
+    var yAxis = d3.axisLeft().scale(yAxisScale).tickSize(margins.x.left / 4).ticks(5)
+
+    // x-axis
+    var xAxisScale = d3.scaleBand()
+                        .domain(subset.map(function(d) {
+                          if (d[hyperParameters.data.x].length > hyperParameters.fonts.axes.maxCharacters.x) {
+                              return d[hyperParameters.data.x].slice(0, hyperParameters.fonts.axes.maxCharacters.x - 3) + "..."
+                          }
+                          return d[hyperParameters.data.x].slice(0, hyperParameters.fonts.axes.maxCharacters.x)
+                        }))
+                        .range([0, maxDrawingValues.x])
+                        .align([0.5])
+
+    var xAxis = d3.axisBottom().scale(xAxisScale)
+
+    // First call position axes
+    if (d3.select("#yAxisGroup").empty()) {
+        // add and position y axis
+        d3.select("svg").append("g").attr("id", "yAxisGroup").call(yAxis)
+        d3.selectAll("#yAxisGroup").attr("transform", "translate(" + (margins.axes.y + margins.x.left / 2) + "," + (margins.y.top + margins.title + margins.buttons) + ")")
+        // add and position x axis
+        d3.select("svg").append("g").attr("id", "xAxisGroup").call(xAxis)
+        d3.selectAll("#xAxisGroup").attr("transform", "translate(" + (margins.axes.y + margins.x.left) + "," + (margins.y.top + maxDrawingValues.y + margins.title + margins.buttons + margins.y.bottom / 2) + ")")
+    } else { // not first call - use transitions
+        // y axis
+        d3.select("#yAxisGroup").transition().duration(500).call(yAxis)
+        d3.selectAll("#yAxisGroup").transition().duration(500).attr("transform", "translate(" + (margins.axes.y + margins.x.left / 2) + "," + (margins.y.top + margins.title + margins.buttons) + ")")
+        // x axis
+        d3.select("#xAxisGroup").transition().duration(500).call(xAxis)
+        d3.selectAll("#xAxisGroup").transition().duration(500).attr("transform", "translate(" + (margins.axes.y + margins.x.left) + "," + (margins.y.top + maxDrawingValues.y + margins.title + margins.buttons + margins.y.bottom / 2) + ")")
+    }
+
+    // Adjust text to angle, fontsize and fontfamily
+    d3.selectAll("#xAxisGroup")
+      .selectAll('text')
+      .attr("text-anchor", "end")
+      .attr("font-size", hyperParameters.fonts.axes.size)
+      .attr("transform", "rotate(-45)").transition().duration(500)
+      .attr("x", -hyperParameters.fonts.axes.size)
+      .attr("y", hyperParameters.fonts.axes.size)
+
+    d3.selectAll("#yAxisGroup")
+      .selectAll('text')
+      .attr("font-size", hyperParameters.fonts.axes.size)
+}
+
+//-------------------------------------------------------------------//
+//                                                                   //
+//                          MAKE TOOLTIP                             //
+//                                                                   //
+//-------------------------------------------------------------------//
+// Extracts the designated keys from hyperParameters.data.tooltipKeys
+// to pass to makeTooltip
+function getToolTipTextArray(data) {
+  var textArray = []
+  for (var i = 0; i < hyperParameters.data.tooltipKeys.length; i++) {
+    textArray.push(data[hyperParameters.data.tooltipKeys[i]])
+  }
+  return textArray
+}
+
+function makeTooltip(x, y, textArray) {
+    // longest string sets the width of tooltip
+    var longestString = d3.max(textArray, function(el) {return el.toString().length})
+
+    var path = getToolTipPath(x, y, longestString, hyperParameters.tooltip.point, hyperParameters.tooltip.curve)
+
+    // make a group for the tooltip (path + text)
+    d3.select("svg")
+      .append("g")
+      .attr("class", "tooltipGroup")
+      .attr("id", "tooltip")
+    var tooltip = d3.select("g.tooltipGroup")
+
+    // add the path and give it color
+    tooltip.append("path")
+           .attr("id", "tooltipPath")
+           .attr("d", path)
+           .attr("fill", hyperParameters.colors.tooltip.fill)
+           .attr("stroke", hyperParameters.colors.tooltip.stroke)
+           .attr("opacity", hyperParameters.colors.tooltip.opacity)
+
+    // height of just the tool tip
+    var toolTipHeight = textArray.length * hyperParameters.fonts.tooltip.size + 2 * hyperParameters.tooltip.curve + hyperParameters.tooltip.point
+
+    for (var i = 0; i < textArray.length; i++) {
+        var text = tooltip.append("text")
+                          .text(textArray[i])
+                          .attr("font-size", hyperParameters.fonts.tooltip.size)
+                          .attr("text-anchor", "middle")
+                          .attr("x", x)
+                          .attr("y", y - toolTipHeight + hyperParameters.tooltip.curve + ((i+1) * hyperParameters.fonts.tooltip.size))
+                          .attr("class", "tooltipText")
+                          .attr("fill", hyperParameters.colors.tooltip.emphasis)
+                          .attr("font-family", hyperParameters.fonts.tooltip.family)
+                          .attr("font-weight", "normal")
+        if (i > 0) {
+            text.attr("fill", hyperParameters.colors.tooltip.text)
+                .attr("font-family", hyperParameters.fonts.tooltip.family)
+                .attr("font-weight", "normal")
+        }
+    }
+}
+
+// Returns the path (the d attribute) for the tooltip as a string
+function getToolTipPath(x, y, stringLength, pointShift, curveShift) {
+    // Move to x / y (i.e. start at tip of upside down triangle)
+    d = "M " + x.toString() + " " + y.toString() + " "
+
+    neededLength = stringLength * hyperParameters.fonts.tooltip.size / 2
+    // pointShift = 0.05 * neededLength
+    //pointShift = 10
+
+    // go up and to the left
+    d += "l -" + pointShift + " -" + pointShift + " "
+        // go left
+    d += "l -" + (neededLength / 2) + " 0 "
+        // curve left and up
+    d += "q -" + curveShift + " 0 -" + curveShift + " -" + curveShift + " "
+        // go up
+    d += "l 0 -" + (2 * hyperParameters.fonts.tooltip.size) + " "
+        // curve up and right
+    d += "q 0 -" + curveShift + " " + curveShift + " -" + curveShift + " "
+        // go right
+    d += "l " + (pointShift * 2 + neededLength) + " 0 "
+        // curve right and down
+    d += "q " + curveShift + " 0 " + curveShift + " " + curveShift + " "
+        // go down
+    d += "l 0 " + (2 * hyperParameters.fonts.tooltip.size) + " "
+        // curve down and left
+    d += "q 0 " + curveShift + " -" + curveShift + " " + curveShift + " "
+        /// go left
+    d += "l -" + (neededLength / 2) + " 0 "
+        // return to start
+    d += "l -" + (pointShift) + " " + pointShift + "z"
+    return d
+
+}
+  </script>
+</body>
+</html>

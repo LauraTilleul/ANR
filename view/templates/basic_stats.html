@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<head>
+<style>
+
+.rectangle {
+	fill: steelblue;
+}
+.rectangle:hover {
+	fill: orange;
+}
+.axis {
+  font: 10px sans-serif;
+}
+
+.axis path,
+.axis line {
+  fill: none;
+  stroke: #000;
+  shape-rendering: crispEdges;
+}
+</style>
+</head>
+<body>
+<div id="drop" align=center></div>
+<script src="http://d3js.org/d3.v3.min.js"></script>
+<script>
+
+var margin = {top: 80, right: 180, bottom: 80, left: 180},
+    width = 960 - margin.left - margin.right,
+    height = 500 - margin.top - margin.bottom;
+
+var svg = d3.select("body").append("svg")
+	.attr("width", width + margin.left + margin.right)
+    .attr("height", height + margin.top + margin.bottom)
+	.append("g")
+    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+d3.tsv("static/basicStats.tsv", function(error, data){
+                console.log(data)
+	// Get every column value
+	var elements = Object.keys(data[0])
+		.filter(function(d){
+			return ((d != "Année") );
+		});
+	var selection = elements[0];
+    console.log(elements);
+
+	var y = d3.scale.linear()
+			.domain([0, d3.max(data, function(d){
+				return +d[selection];
+			})])
+			.range([height, 0]);
+
+	var x = d3.scale.ordinal()
+			.domain(data.map(function(d){ return d.Année;}))
+			.rangeBands([0, width],0.2,0.1);
+
+
+	var xAxis = d3.svg.axis()
+		.scale(x)
+	    .orient("bottom");
+
+	var yAxis = d3.svg.axis()
+		.scale(y)
+	    .orient("left");
+
+	svg.append("g")
+    	.attr("class", "x axis")
+    	.attr("transform", "translate(0," + height + ")")
+    	.call(xAxis)
+    	.selectAll("text")
+    	.style("font-size", "8px")
+      	.style("text-anchor", "end")
+      	.attr("dx", "-.8em")
+      	.attr("dy", "-.55em")
+      	.attr("transform", "rotate(-90)" );
+
+
+ 	svg.append("g")
+    	.attr("class", "y axis")
+    	.call(yAxis);
+
+	svg.selectAll("rectangle")
+		.data(data)
+		.enter()
+		.append("rect")
+		.attr("class","rectangle")
+        .style("fill",function(d){
+            if (d[selection] == 0){
+                return "#fafafa";
+            }
+            return "steelblue";
+        })
+        .attr("onmouseover",function(d){
+            if (d[selection]==0){
+                return "this.style.fill='lightgray'";
+            }
+            return "this.style.fill='orange'";})
+        .attr("onmouseout",function(d){
+            if (d[selection] == 0){
+                return "this.style.fill='#fafafa'";
+            }
+            return "this.style.fill='steelblue'";
+        })
+		//.attr("width", width/data.length)
+        .attr('width', x.rangeBand())
+		.attr("height",function(d){
+            if (d[selection] == 0 ) {
+                return height;
+            }
+			return height - y(+d[selection]);
+		})
+		.attr("x", function(d, i){
+			return (width / data.length) * i ;
+		})
+		.attr("y", function(d){
+            if ( d[selection] == 0){
+                return 0;
+            }
+			return y(+d[selection]);
+		})
+		.append("title")
+		.text(function(d){
+			if ( d[selection] == 0 ){
+                return d.Année + ' : MISSING DATA';
+            }
+            return d.Année + " : " + parseFloat(d[selection]).toFixed(2);
+		});
+// labels for axes
+    svg.append("text")
+        .attr("class","xlabel")
+        .attr("text-anchor","end")
+        .attr("x",width/2)
+        .attr("y",height+40)
+        .text("Année");
+    
+    svg.append("text")
+        .attr("class","ylabel")
+        .attr("text-anchor","end")
+        .attr("x",-height/10)
+        .attr("y",-100)
+        .attr("dy",".75em")
+        .attr("transform","rotate(-90)")
+        .text(elements[0])
+        
+	var selector = d3.select("#drop")
+    	.append("select")
+    	.attr("id","dropdown")
+    	.on("change", function(d){
+        	selection = document.getElementById("dropdown");
+        	y.domain([0, d3.max(data, function(d){
+				return +d[selection.value];})]);
+
+        	yAxis.scale(y);
+
+        	d3.selectAll(".rectangle")
+           		.transition()
+                .style("fill", function(d){
+                    console
+                    if (d[selection.value] == 0){
+                        return "#fafafa";}
+                    return "steelblue";
+                })
+	            .attr("height", function(d){
+                    if (d[selection.value] == 0){
+                        return height;
+                    }
+					return height - y(+d[selection.value]);
+				})
+				.attr("x", function(d, i){
+					return (width / data.length) * i ;
+				})
+				.attr("y", function(d){
+                    if ( d[selection.value] == 0){
+                        return 0;
+                    }
+					return y(+d[selection.value]);
+				})
+
+                .attr("onmouseover",function(d){
+                    if (d[selection.value] == 0 ){
+                        return "this.style.fill='lightgray'";
+                    }                    
+                        return "this.style.fill='orange'";
+                })
+                .attr("onmouseout",function(d){
+                    if (d[selection.value] == 0){
+                        return "this.style.fill='#fafafa'";
+                    }
+                        return "this.style.fill='steelblue'";
+                 })
+           		.ease("linear")
+           		.select("title")
+           		.text(function(d){
+                    if ( d[selection.value] == 0 ){
+                        return d.Année + ' : MISSING DATA';
+                    }
+           			return d.Année + " : " + parseFloat(d[selection.value]).toFixed(2);
+           		});
+
+            d3.selectAll(".ylabel")
+               .text(selection.value);
+
+           	d3.selectAll("g.y.axis")
+           		.transition()
+           		.call(yAxis);
+
+         });
+
+    selector.selectAll("option")
+      .data(elements)
+      .enter().append("option")
+      .attr("value", function(d){
+        return d;
+      })
+      .text(function(d){
+        return d;
+      })
+
+});
+
+</script>
+</body>
+</html>
