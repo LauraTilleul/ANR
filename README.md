@@ -24,6 +24,7 @@ un point représente un projet.
 -> Répartition des genres
 
 cliquer sur une barre pour accéder au top des programmes i.e les programmes qui comptabilisent le plus de projets.
+    
     -> Top Programmes (8 programmes max) (non terminé)
     possibilité de sélectionner une année
     passer sur une barre pour afficher le nom du programme et le nombre de projets associés.
@@ -38,8 +39,10 @@ représentation de 50 termes les + pertinents dans les résumés et leurs relati
 possibilité de trier par nom, fréquence, cluster
 
 clusters : un point coloré <=> les 2 termes sont liés (apparaissent dans mêmes projets) et appartiennent au même cluster.
+
         un point non coloré (gris/noir) <=> relation entre les termes, mais n'appartiennent pas au même cluster
-        rien <=> pas de relation entre les termes
+        
+        Rien <=> pas de relation entre les termes
 -   > plus un point est foncé plus la liaison est forte
 
 -> Graphe des partenaires
