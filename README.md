@@ -7,7 +7,7 @@ Les données étant fixes il n'est pas nécessaire de réexecuter ces scripts. L
 
 Les fichiers de données ainsi obtenues sont utilisées pour différents graphes. Les codes HTML sont dans view/templates. Les scripts js éventuels sont dans static/script.
 
-Les données "originales" i.e qui ne sont pas obtenues par un script sont dans original/static. Il s'agit du fichier csv de base ainsi que d'un fichier texte utilisé pour le travail avec TF/IDF.
+Les données "originales" i.e qui ne sont pas obtenues par un script doivent être dans original/static. Il s'agit du fichier csv de base ainsi que d'un fichier texte utilisé pour le travail avec TF/IDF. Les données étant trop lourdes elles sont en zip dans static/original.zip, à décompresser
 
 
 Depuis le menu : 
